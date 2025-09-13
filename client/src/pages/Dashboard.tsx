@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 // import TrafficVisualization from "@/components/TrafficVisualization";
 // import MetricsPanel from "@/components/MetricsPanel";
 // import AIDecisionPanel from "@/components/AIDecisionPanel";
-// import PerformanceCharts from "@/components/PerformanceCharts";
+import PerformanceCharts from "@/components/PerformanceCharts";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTrafficData } from "@/hooks/useTrafficData";
 import { TrafficCone, Play, Pause, Download, Clock } from "lucide-react";
@@ -208,15 +208,10 @@ export default function Dashboard() {
 
         {/* Performance Charts */}
         <div className="mt-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>🧪 Performance Charts (Testing Mode)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">PerformanceCharts component disabled for testing</p>
-              <p className="text-sm text-muted-foreground">Chart.js visualization placeholder</p>
-            </CardContent>
-          </Card>
+          <PerformanceCharts 
+            currentMetrics={trafficState.metrics}
+            historicalData={trafficHistory || []}
+          />
         </div>
 
         {/* System Status */}
