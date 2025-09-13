@@ -25,6 +25,13 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
+  // Sync local simulationSpeed with trafficState from WebSocket
+  useEffect(() => {
+    if (trafficState && trafficState.simulationSpeed !== simulationSpeed) {
+      setSimulationSpeed(trafficState.simulationSpeed);
+    }
+  }, [trafficState?.simulationSpeed, simulationSpeed]);
+
   const handleStartSimulation = () => {
     sendMessage({ type: 'startSimulation', speed: simulationSpeed });
   };
