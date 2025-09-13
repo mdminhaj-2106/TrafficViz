@@ -6,7 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 // import TrafficVisualization from "@/components/TrafficVisualization";
 // import MetricsPanel from "@/components/MetricsPanel";
-// import AIDecisionPanel from "@/components/AIDecisionPanel";
+import AIDecisionPanel from "@/components/AIDecisionPanel";
 import PerformanceCharts from "@/components/PerformanceCharts";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTrafficData } from "@/hooks/useTrafficData";
@@ -118,14 +118,7 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>🧪 AI Decision Panel (Testing Mode)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">AIDecisionPanel component disabled for testing</p>
-              </CardContent>
-            </Card>
+            <AIDecisionPanel aiDecision={trafficState.aiDecision} />
           </div>
 
           {/* Metrics and Controls */}
