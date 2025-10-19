@@ -2,12 +2,17 @@ import { type AIDecisionData, type IncomingPlatoon, type TrafficSignalState } fr
 
 export class PredictorDQN {
   private qTable: Map<string, { NS: number; EW: number }> = new Map();
+  private learningRate = 0.1;
+  private explorationRate = 0.2;
   
   constructor() {
-    // Initialize with some learned Q-values
+    // Initialize with more sophisticated Q-values based on traffic patterns
     this.qTable.set('high_ew_pressure', { NS: 85.1, EW: 340.9 });
     this.qTable.set('high_ns_pressure', { NS: 280.5, EW: 120.3 });
     this.qTable.set('balanced_pressure', { NS: 150.2, EW: 148.7 });
+    this.qTable.set('very_high_ew_pressure', { NS: 45.2, EW: 450.8 });
+    this.qTable.set('very_high_ns_pressure', { NS: 380.6, EW: 85.4 });
+    this.qTable.set('low_traffic', { NS: 120.0, EW: 125.0 });
   }
 
   private calculatePressure(platoons: IncomingPlatoon[], direction: 'NS' | 'EW'): number {
@@ -22,9 +27,13 @@ export class PredictorDQN {
   }
 
   private getStateKey(nsPressure: number, ewPressure: number): string {
+    const totalPressure = nsPressure + ewPressure;
     const ratio = ewPressure / (nsPressure + 0.1);
     
+    if (totalPressure < 1.0) return 'low_traffic';
+    if (ratio > 3.0) return 'very_high_ew_pressure';
     if (ratio > 2.0) return 'high_ew_pressure';
+    if (ratio < 0.33) return 'very_high_ns_pressure';
     if (ratio < 0.5) return 'high_ns_pressure';
     return 'balanced_pressure';
   }
@@ -36,23 +45,49 @@ export class PredictorDQN {
     const stateKey = this.getStateKey(nsPressure, ewPressure);
     const qValues = this.qTable.get(stateKey) || { NS: 100, EW: 100 };
     
-    // Add some randomness and learning
-    qValues.NS += Math.random() * 10 - 5;
-    qValues.EW += Math.random() * 10 - 5;
+    // Add strategic randomness for exploration, but favor high-pressure directions
+    const pressureBonus = {
+      NS: nsPressure * 20,
+      EW: ewPressure * 20
+    };
     
-    const recommended = qValues.EW > qValues.NS ? 'EW' : 'NS';
+    const explorationNoise = {
+      NS: (Math.random() - 0.5) * this.explorationRate * 20,
+      EW: (Math.random() - 0.5) * this.explorationRate * 20
+    };
+    
+    const finalQValues = {
+      NS: qValues.NS + pressureBonus.NS + explorationNoise.NS,
+      EW: qValues.EW + pressureBonus.EW + explorationNoise.EW
+    };
+    
+    // Learn from current situation
+    this.updateQValues(stateKey, finalQValues.NS, finalQValues.EW);
+    
+    const recommended = finalQValues.EW > finalQValues.NS ? 'EW' : 'NS';
     
     return {
-      NS: Math.round(qValues.NS * 10) / 10,
-      EW: Math.round(qValues.EW * 10) / 10,
+      NS: Math.round(finalQValues.NS * 10) / 10,
+      EW: Math.round(finalQValues.EW * 10) / 10,
       recommended
     };
+  }
+  
+  private updateQValues(stateKey: string, nsValue: number, ewValue: number): void {
+    const current = this.qTable.get(stateKey) || { NS: 100, EW: 100 };
+    
+    // Simple Q-learning update
+    current.NS = current.NS + this.learningRate * (nsValue - current.NS);
+    current.EW = current.EW + this.learningRate * (ewValue - current.EW);
+    
+    this.qTable.set(stateKey, current);
   }
 }
 
 export class GuardianSafety {
   private lastPhaseChangeTime = Date.now();
-  private readonly MIN_GREEN_TIME = 7000; // 7 seconds
+  private readonly MIN_GREEN_TIME = 5000; // Reduced to 5 seconds for better responsiveness
+  private readonly MAX_GREEN_TIME = 45000; // Maximum 45 seconds to prevent starvation
   
   validateDecision(
     recommendation: 'NS' | 'EW',
@@ -73,6 +108,11 @@ export class GuardianSafety {
       systemHealth: systemHealth,
       approved: false
     };
+    
+    // Override minGreenTime if we've been in phase too long (prevent starvation)
+    if (timeInPhase >= this.MAX_GREEN_TIME) {
+      checks.minGreenTime = true;
+    }
     
     checks.approved = checks.minGreenTime && checks.safeTransition && checks.systemHealth;
     
@@ -112,11 +152,11 @@ export class AIEngine {
       systemHealth
     );
     
-    // Calculate timing plan
+    // Calculate timing plan more intelligently
     const vehicleLoad = this.calculateVehicleLoad(platoons, prediction.recommended);
-    const saturationFlow = 2; // vehicles per second
-    const baseDuration = Math.max(10, vehicleLoad / saturationFlow);
-    const bufferTime = 3;
+    const saturationFlow = 2.5; // Increased throughput - vehicles per second
+    const baseDuration = Math.max(8, Math.min(35, vehicleLoad / saturationFlow)); // Constrained duration
+    const bufferTime = 2; // Reduced buffer for faster response
     const totalDuration = baseDuration + bufferTime;
     
     const startTime = Math.max(0, this.calculateOptimalStartTime(platoons, prediction.recommended));

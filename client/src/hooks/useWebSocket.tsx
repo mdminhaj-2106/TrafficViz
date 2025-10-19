@@ -16,14 +16,16 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     try {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+      const port = window.location.port || "3000"; // Use port 3000 since we're running on that port
       const host = window.location.hostname;
       const wsUrl = `${protocol}//${host}:${port}/ws`;
+      
+      console.log("Attempting to connect to WebSocket:", wsUrl);
       
       socketRef.current = new WebSocket(wsUrl);
 
       socketRef.current.onopen = () => {
-        console.log("WebSocket connected");
+        console.log("WebSocket connected successfully");
         setIsConnected(true);
       };
 
@@ -66,6 +68,20 @@ export function useWebSocket() {
       socketRef.current.onerror = (error) => {
         console.error("WebSocket error:", error);
         setIsConnected(false);
+      };
+
+      socketRef.current.onclose = (event) => {
+        console.log("WebSocket closed:", event.code, event.reason);
+        setIsConnected(false);
+        
+        // Don't reconnect if it was a clean close (1000) or if we're closing intentionally
+        if (event.code !== 1000 && event.code !== 1001) {
+          // Attempt to reconnect after a delay
+          reconnectTimeoutRef.current = setTimeout(() => {
+            console.log("Attempting to reconnect WebSocket...");
+            connect();
+          }, 3000);
+        }
       };
     } catch (error) {
       console.error("Error creating WebSocket connection:", error);

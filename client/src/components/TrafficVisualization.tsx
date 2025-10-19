@@ -28,9 +28,10 @@ export default function TrafficVisualization({
   useEffect(() => {
     if (!mountRef.current) return;
 
-    // Initialize THREE.js scene
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a1a);
+    try {
+      // Initialize THREE.js scene
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x1a1a1a);
     
     const camera = new THREE.PerspectiveCamera(75, 800 / 400, 0.1, 1000);
     camera.position.set(0, 50, 50);
@@ -43,20 +44,28 @@ export default function TrafficVisualization({
       const context = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
       
       if (context) {
-        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer = new THREE.WebGLRenderer({ 
+          antialias: true,
+          alpha: true,
+          preserveDrawingBuffer: true,
+          powerPreference: "high-performance"
+        });
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       } else {
         throw new Error('WebGL not supported');
       }
     } catch (error) {
-      console.warn('WebGL not supported, falling back to Canvas renderer:', error);
+      console.warn('WebGL not supported, using fallback renderer:', error);
+      // Use a more compatible WebGL renderer with fallback options
       renderer = new THREE.WebGLRenderer({ 
         antialias: false,
         alpha: true,
-        preserveDrawingBuffer: true
+        preserveDrawingBuffer: true,
+        powerPreference: "default",
+        failIfMajorPerformanceCaveat: false
       });
-      // Disable shadows for Canvas renderer
+      // Disable shadows for fallback renderer
       renderer.shadowMap.enabled = false;
     }
     
@@ -175,6 +184,33 @@ export default function TrafficVisualization({
       }
       renderer.dispose();
     };
+    } catch (error) {
+      console.error('Failed to initialize THREE.js scene:', error);
+      // Show fallback 2D visualization instead of crashing
+      if (mountRef.current) {
+        mountRef.current.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: white; text-align: center; background: #1a1a1a;">
+            <div style="width: 100%; height: 100%; position: relative;">
+              <div style="position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;">
+                <h3 style="margin: 0 0 10px 0; color: #60a5fa;">Traffic Intersection</h3>
+                <p style="margin: 5px 0; color: #94a3b8;">Current Phase: ${signalState.currentPhase}</p>
+                <p style="margin: 5px 0; color: #94a3b8;">Time Remaining: ${signalState.phaseTimeRemaining}s</p>
+              </div>
+              <div style="position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;">
+                <h4 style="margin: 0 0 10px 0; color: #60a5fa;">Queue Status</h4>
+                <p style="margin: 3px 0; color: #94a3b8;">North: ${metrics.northQueue}</p>
+                <p style="margin: 3px 0; color: #94a3b8;">East: ${metrics.eastQueue}</p>
+                <p style="margin: 3px 0; color: #94a3b8;">South: ${metrics.southQueue}</p>
+                <p style="margin: 3px 0; color: #94a3b8;">West: ${metrics.westQueue}</p>
+              </div>
+              <div style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;">
+                <p style="margin: 0; color: #fbbf24;">2D Fallback Mode - Traffic simulation active</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
   }, []);
 
   // Update traffic lights based on signal state
@@ -320,14 +356,22 @@ export default function TrafficVisualization({
   );
 
   return (
-    <Card data-testid="traffic-visualization">
-      <CardHeader>
+    <Card className="bg-white dark:bg-slate-800 shadow-lg border-0" data-testid="traffic-visualization">
+      <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
-          <CardTitle>Live Traffic Intersection</CardTitle>
+          <CardTitle className="text-lg font-semibold text-slate-800 dark:text-white">Live Traffic Intersection</CardTitle>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-muted-foreground">Current Phase:</span>
-              <Badge variant="outline" data-testid="current-phase">
+              <span className="text-sm text-slate-600 dark:text-slate-300">Current Phase:</span>
+              <Badge 
+                variant="outline" 
+                className={`${
+                  signalState.currentPhase === 'EW' 
+                    ? 'bg-green-50 text-green-700 border-green-200' 
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                }`}
+                data-testid="current-phase"
+              >
                 {signalState.currentPhase === 'NS' ? 'North-South' : 'East-West'}
               </Badge>
             </div>

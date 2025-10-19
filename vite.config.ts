@@ -4,6 +4,7 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 export default defineConfig({
+  cacheDir: '/tmp/vite-cache',
   plugins: [
     react(),
     runtimeErrorOverlay(),
@@ -31,6 +32,7 @@ export default defineConfig({
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
   },
+  base: process.env.NODE_ENV === "production" ? "/" : "/",
   server: {
     fs: {
       strict: true,

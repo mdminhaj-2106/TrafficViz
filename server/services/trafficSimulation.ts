@@ -7,14 +7,16 @@ export class TrafficSimulation {
   private simulationInterval?: NodeJS.Timeout;
   private phaseChangeTime = Date.now();
   private currentTime = 0;
+  private currentState: TrafficSystemState;
   
   constructor(private onStateUpdate: (state: TrafficSystemState) => void) {}
   
   start(initialState: TrafficSystemState): void {
     this.stop();
+    this.currentState = initialState;
     
     this.simulationInterval = setInterval(() => {
-      this.simulationStep(initialState);
+      this.simulationStep();
     }, 1000 / initialState.simulationSpeed);
   }
   
@@ -25,42 +27,46 @@ export class TrafficSimulation {
     }
   }
   
-  private simulationStep(state: TrafficSystemState): void {
+  private simulationStep(): void {
     this.currentTime += 1;
     
-    // Update platoons (simulate movement)
-    const updatedPlatoons = this.updatePlatoons(state.incomingPlatoons);
+    // Update platoons (simulate movement and queue processing)
+    const updatedPlatoons = this.updatePlatoons(this.currentState.incomingPlatoons);
     
-    // Generate new random platoons occasionally
-    if (Math.random() < 0.1) {
-      updatedPlatoons.push(this.generateRandomPlatoon());
+    // Process vehicles through intersection based on current signal
+    const processedPlatoons = this.processVehiclesThroughIntersection(updatedPlatoons, this.currentState.signalState);
+    
+    // Generate new random platoons more conservatively
+    if (Math.random() < 0.05 && processedPlatoons.length < 8) {
+      processedPlatoons.push(this.generateRandomPlatoon());
     }
     
     // Update AI decision
     const aiDecision = this.aiEngine.makeDecision(
-      updatedPlatoons,
-      state.signalState,
+      processedPlatoons,
+      this.currentState.signalState,
       true
     );
     
     // Update traffic signals based on AI decision
-    const updatedSignalState = this.updateTrafficSignals(state.signalState, aiDecision);
+    const updatedSignalState = this.updateTrafficSignals(this.currentState.signalState, aiDecision);
     
     // Calculate new metrics based on current state
-    const updatedMetrics = this.calculateMetrics(state.metrics, updatedPlatoons, updatedSignalState);
+    const updatedMetrics = this.calculateMetrics(this.currentState.metrics, processedPlatoons, updatedSignalState);
     
     // Generate system events
-    const events = this.generateSystemEvents(state, aiDecision);
+    const events = this.generateSystemEvents(this.currentState, aiDecision);
     
     const updatedState: TrafficSystemState = {
-      ...state,
+      ...this.currentState,
       metrics: updatedMetrics,
       signalState: updatedSignalState,
-      incomingPlatoons: updatedPlatoons,
+      incomingPlatoons: processedPlatoons,
       aiDecision,
       events,
     };
     
+    this.currentState = updatedState;
     this.onStateUpdate(updatedState);
   }
   
@@ -68,9 +74,37 @@ export class TrafficSimulation {
     return platoons
       .map(platoon => ({
         ...platoon,
-        eta: Math.max(0, platoon.eta - 1)
+        eta: Math.max(0, platoon.eta - 1),
+        vehicleCount: platoon.vehicleCount // Keep vehicles to process through intersection
       }))
-      .filter(platoon => platoon.eta > 0); // Remove arrived platoons
+      .filter(platoon => platoon.eta > 0 || platoon.vehicleCount > 0); // Keep platoons that haven't arrived or still have vehicles
+  }
+  
+  private processVehiclesThroughIntersection(platoons: IncomingPlatoon[], signalState: any): IncomingPlatoon[] {
+    return platoons.map(platoon => {
+      // If platoon has arrived and the signal is green for their direction, process some vehicles
+      if (platoon.eta <= 0 && platoon.vehicleCount > 0) {
+        const isGreenDirection = this.isGreenDirection(platoon.direction, signalState);
+        if (isGreenDirection) {
+          // Process 2-4 vehicles per second when green
+          const processedVehicles = Math.min(platoon.vehicleCount, 4); // Fixed processing rate
+          return {
+            ...platoon,
+            vehicleCount: Math.max(0, platoon.vehicleCount - processedVehicles)
+          };
+        }
+      }
+      return platoon;
+    }).filter(platoon => platoon.vehicleCount > 0);
+  }
+  
+  private isGreenDirection(direction: string, signalState: any): boolean {
+    if (signalState.currentPhase === 'NS') {
+      return direction === 'north' || direction === 'south';
+    } else if (signalState.currentPhase === 'EW') {
+      return direction === 'east' || direction === 'west';
+    }
+    return false;
   }
   
   private generateRandomPlatoon(): IncomingPlatoon {
@@ -137,27 +171,38 @@ export class TrafficSimulation {
     
     const totalQueueLength = northQueue + eastQueue + southQueue + westQueue;
     
-    // Simulate wait time based on queue length and signal state
-    let averageWaitTime = currentMetrics.averageWaitTime;
+    // Calculate wait time more realistically
+    let averageWaitTime = 0;
+    const totalVehicles = Math.max(1, totalQueueLength);
+    
     if (signalState.currentPhase === 'NS') {
-      averageWaitTime = (northQueue + southQueue) * 0.5 + (eastQueue + westQueue) * 1.2;
+      // NS vehicles wait less, EW vehicles wait more
+      const nsVehicles = northQueue + southQueue;
+      const ewVehicles = eastQueue + westQueue;
+      averageWaitTime = (nsVehicles * 2 + ewVehicles * 8) / totalVehicles;
     } else {
-      averageWaitTime = (eastQueue + westQueue) * 0.5 + (northQueue + southQueue) * 1.2;
+      // EW vehicles wait less, NS vehicles wait more
+      const nsVehicles = northQueue + southQueue;
+      const ewVehicles = eastQueue + westQueue;
+      averageWaitTime = (ewVehicles * 2 + nsVehicles * 8) / totalVehicles;
     }
     
-    // Calculate throughput (vehicles per minute)
-    const throughput = Math.max(100, 180 - (totalQueueLength * 2));
+    // Calculate throughput based on actual processing
+    const greenDirectionVehicles = signalState.currentPhase === 'NS' ? northQueue + southQueue : eastQueue + westQueue;
+    const throughput = Math.max(80, 120 - (totalQueueLength * 0.5) + (greenDirectionVehicles * 0.3));
     
-    // Calculate efficiency based on optimal vs actual performance
-    const efficiency = Math.max(60, Math.min(95, 90 - (averageWaitTime - 20)));
+    // Calculate efficiency based on queue management and wait times
+    const queueEfficiency = Math.max(0, 100 - (totalQueueLength * 2));
+    const waitTimeEfficiency = Math.max(0, 100 - (averageWaitTime * 3));
+    const efficiency = (queueEfficiency + waitTimeEfficiency) / 2;
     
     return {
       id: randomUUID(),
       timestamp: Date.now(),
       averageWaitTime: Math.round(averageWaitTime * 10) / 10,
       totalQueueLength,
-      throughput,
-      efficiency: Math.round(efficiency * 10) / 10,
+      throughput: Math.round(throughput),
+      efficiency: Math.round(Math.max(70, Math.min(98, efficiency)) * 10) / 10,
       northQueue,
       eastQueue,
       southQueue,
