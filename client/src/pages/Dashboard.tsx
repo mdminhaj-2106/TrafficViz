@@ -8,14 +8,21 @@ import AIDecisionPanel from "@/components/AIDecisionPanel";
 import PerformanceCharts from "@/components/PerformanceCharts";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTrafficData } from "@/hooks/useTrafficData";
+import { useMockData } from "@/hooks/useMockData";
 import { TrafficCone, Play, Pause, Download, Clock, Activity, Zap, TrendingUp } from "lucide-react";
 
 export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
   const [simulationSpeed, setSimulationSpeed] = useState(1);
   const [showFallback, setShowFallback] = useState(false);
-  const { trafficState, sendMessage, isConnected } = useWebSocket();
+  const { trafficState: wsTrafficState, sendMessage: wsSendMessage, isConnected: wsIsConnected } = useWebSocket();
   const { data: trafficHistory } = useTrafficData();
+  const { trafficState: mockTrafficState, isConnected: mockIsConnected, sendMessage: mockSendMessage } = useMockData();
+  
+  // Use WebSocket data if available, otherwise use mock data
+  const trafficState = wsTrafficState || mockTrafficState;
+  const isConnected = wsIsConnected || mockIsConnected;
+  const sendMessage = wsSendMessage || mockSendMessage;
 
   // Debug logging
   console.log('Dashboard render:', { trafficState: !!trafficState, isConnected });
