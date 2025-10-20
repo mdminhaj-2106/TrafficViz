@@ -134,6 +134,3 @@ This plan creates a perfect, adaptive green wave for 80% of the vehicles, demons
 
 ###### Sample
 >[!important] Our main goal is to minimize the avg waiting times
-----
-
-###### ;klwnglk;e
